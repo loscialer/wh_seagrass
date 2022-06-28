@@ -1,0 +1,205 @@
+---
+title: "article_sripts"
+author: "Riccardo Losciale"
+date: "23/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Libraries
+```{r}
+library("patchwork")
+library('stargazer')
+library('ggsci')
+library("ggpubr")
+library("forcats")
+library("gplots")
+library("latticeExtra")
+library("grid")
+library("vcd")
+library("stats")
+library("ggrepel")
+library("statmod")
+library('wordcloud2')
+library('ggfortify')
+library('sjPlot')
+library('effects')
+library('knitr')
+library('MASS')
+library('tidytext')
+library("tidyverse")
+```
+
+
+#Open the dataset and open it
+```{r Open, message=FALSE, warning=FALSE, paged.print=FALSE, results='hide'}
+Marine_coastal_WH <- read.csv('data/WH_seagrass.csv') #'WH_seagrass.csv'
+research <- read.csv('data/Research_effort.csv')
+
+```
+
+#Data Manipulation
+```{r}
+Seagrass_data <- Marine_coastal_WH[Marine_coastal_WH$Rank > 0,] 
+SOC_data <- Seagrass_data[complete.cases(Seagrass_data$SOC_Most_Recent), ] 
+
+SOC_lables <- c(" before 1990", "1990-2000", "2000-2010", "2010-2015", "after 2015")
+
+SOC_data$SOC_cut <- cut(SOC_data$SOC_Most_Recent,
+               c(1985, 1990, 2000, 2010, 2015, 2020), 
+               labels = SOC_lables )
+
+SOC_data <- within(SOC_data,
+                   SOC_cut <- factor(SOC_cut,
+                                     levels = names(sort(table(SOC_cut),
+                                                    decreasing = T)))) #sort the dates in order from most recent to less recent  
+
+cc_yes <- SOC_data$SOC_n_Climate_change > 0 # logical vector for mention of climate change
+SOC_data$cc_yes <- cc_yes
+#Sort data by year of SOC and prensence of climate change
+SOC_sorted <- SOC_data %>% 
+  arrange(SOC_data, SOC_cut, cc_yes) %>%  
+  group_by(SOC_cut) %>% 
+  mutate(label_y = cumsum(cc_yes)) %>% 
+  mutate(SOC_cut = factor(SOC_cut, levels = c(' before 1990', '1990-2000','2000-2010','2010-2015', 'after 2015'))) 
+
+Threats <- c(length(SOC_data$Management_and_Institutional_Factors[SOC_data$Management_and_Institutional_Factors == TRUE]), 
+                    length(SOC_data$Trasportation_infrastrucutre[SOC_data$Trasportation_infrastrucutre == T]),
+                    length(SOC_data$Climate_change_and_Severe_weather_events[SOC_data$Climate_change_and_Severe_weather_events == T]),
+                    length(SOC_data$Pollution[SOC_data$Pollution == T]),
+                    length(SOC_data$Buildings_and_development[SOC_data$Buildings_and_development == T]),
+                    length(SOC_data$Services_infrastructures[SOC_data$Services_infrastructures == T]),
+                    length(SOC_data$Invasive_species[SOC_data$Invasive_species == T]),
+                    length(SOC_data$Biological_resource_use_modification[SOC_data$Biological_resource_use_modification ==T]),
+                    length(SOC_data$Social_cultural_uses_of_heritage[SOC_data$Social_cultural_uses_of_heritage == T]),
+                    length(SOC_data$Other_human_activities[SOC_data$Other_human_activities == T]),
+                    length(SOC_data$Sudden_ecological_events[SOC_data$Sudden_ecological_events == T]),
+                    length(SOC_data$Physical_resource_extraction[SOC_data$Physical_resource_extraction == T]),0.01,0.009)
+
+                   
+
+Threat_names <- c("Management and institutional factors","Trasportation infrastrucutre" ,"Climate change and Severe weather events", "Pollution",
+                  "Buildings and development", "Services infrastructures","Invasive species", "Biological resource use modification",
+                  "Social cultural uses of heritage", "Other human activities", "Sudden ecological events", "Physical resource extraction", "Local conditions affecting physical fabric",  "Other factor(s)")
+
+names(Threats) <- Threat_names
+
+
+th_df <- data.frame(threat = names(Threats), occurence = Threats, row.names = NULL)
+```
+
+
+#Figure 3
+```{r Figure_3, message=FALSE, warning=FALSE, paged.print=FALSE, results='hide'}
+figure_3 <- th_df %>% 
+     ggplot(aes(x = reorder(threat, occurence), y = occurence)) + 
+     geom_bar(stat = 'identity') +
+  theme_pubr() + 
+  coord_flip() + 
+  scale_y_continuous(name = 'SOC reports') + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_text(face = 'bold', family = 'serif'), 
+        axis.text.x = element_text(face = 'bold', family = 'serif'), 
+        axis.text.y = element_text(face = 'bold', family = 'serif'))
+```
+
+# Figure 4
+```{r}
+
+figure_4 <- ggplot(SOC_sorted, aes(x = SOC_cut, fill=cc_yes)) +
+  geom_bar(stat = "count") +
+  theme_pubr() +
+  scale_fill_manual(values = c('grey','black'), limits = c('TRUE')) +
+  geom_text(aes(label = ..count..), stat = "count", position = position_stack(0.5),color="white",) +
+  labs(title= NULL,
+       x ="Date of most recent SOC report", y = "Number of SOC reports") +
+  labs(fill = "Climate change mentions") +
+  theme(axis.title.x = element_text(color="black", size=14, face="bold"),
+    axis.title.y = element_text(color="black", size=14, face="bold"))+
+  theme(legend.position="top") +
+  theme(legend.title = element_text(face="bold")) +
+  theme(legend.background = element_rect()) +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                                   size=14)) + 
+  theme(axis.text.y = element_text(face="bold", color="black", 
+                             size=14, angle=0)) +
+  theme(axis.line = element_line(colour = "black", 
+                                  size = 1, linetype = "solid"),
+        legend.text = element_blank()) +
+  scale_y_continuous(breaks=seq(0,10,3)) 
+
+
+```
+
+# Supplementary Material
+# Data manipulation
+```{r}
+research <- research %>% 
+  rename(property = WH.Property, 
+                                s_sco = X._seagrass_Scopus, 
+                                s_wos = X._seagrass_WoS, 
+                                c_sco = X._CC_Scopus, 
+                                c_wos = X._CC_Wos) %>% 
+  mutate(s_sco = s_sco - c_sco, 
+         s_wos = s_wos - c_wos)
+
+research_long <- research %>% 
+  pivot_longer(s_sco:c_wos ,names_to = c("search", "database"),
+               names_pattern = '(^s|c{1})_(.{3})', 
+               values_to = 'articles_count')
+
+research_long$articles_count[is.na(research_long$articles_count)] <- 0
+research_long$articles_count[research_long$articles_count == 0] <- 0.2
+
+research_long <- research_long %>% 
+  mutate(database = factor(database, levels = c('sco','wos'))) %>% 
+  mutate(database = recode_factor(database,  'sco' = 'Scopus', 'wos' = 'Web of Science'), property = as.factor(property), 
+         property = recode_factor(property, 'Lord Howe Island Group' = 'Lord Howe Islands'),
+         articles_count = ifelse((property == 'Komodo National Park'|property == 'Sanganeb MNP' |property == 'Rock Island Lagoon '|property == 'Sian Ka’an '|property == 'Aldabra Atoll') & database == 'Web of Science', 0.21, articles_count))
+```
+
+
+#Figure S1
+```{r}
+safe_colorblind_palette <- c("#88CCEE", "#CC6677", "#DDCC77", 
+                             "#117733", "#332288", "#AA4499", 
+                             "#44AA99", "#999933", "#882255", 
+                             "#661100", "#6699CC", "#888888")
+
+figure_s1 <- research_long %>% 
+   mutate(search = as.factor(search),
+          property = reorder_within(property, articles_count, database)) %>%
+  ggplot(aes(property, articles_count, fill = search)) + 
+  geom_bar(stat = 'identity', position = position_stack(0.8)) + 
+  facet_wrap(~ database, scales = 'free_y') + 
+  coord_flip() + 
+  theme_pubr() + 
+  scale_x_reordered(name = "World Heritage seagrass habitats") + 
+  scale_y_continuous(name = 'Articles count', breaks = c(0,10,25,50,75,100)) + 
+  scale_fill_manual(name = 'Search strategy', 
+                      labels = c('Climate change', 'Preliminary'), values = safe_colorblind_palette[1:2]) + 
+  guides(fill = guide_legend(reverse=TRUE)) + 
+  theme(axis.text = element_text(size = 12)) +
+   geom_hline(yintercept = 10, linetype="dashed", 
+              color = "black", size=1)
+
+
+figure_s1bis <- research_long %>% 
+    mutate(search = as.factor(search)) %>% 
+    ggplot(aes(reorder(property, articles_count), articles_count, fill = search)) + 
+    geom_bar(stat = 'identity', position = position_stack(0.8)) + 
+    facet_wrap(~ database, scales = 'free_y') + 
+    coord_flip() + 
+    theme_pubr() + 
+    scale_x_reordered(name = "World Heritage seagrass habitats") + 
+    scale_y_continuous(name = 'Articles count', breaks = c(0,10,25,50,75,100)) + 
+    scale_fill_manual(name = 'Search strategy', 
+                      labels = c('Climate change', 'Preliminary'), values = safe_colorblind_palette[1:2]) + 
+    guides(fill = guide_legend(reverse=TRUE)) + 
+    theme(axis.text = element_text(size = 8)) +
+   geom_hline(yintercept = 10, linetype="dashed", 
+              color = "black", size=1)
+
+```
